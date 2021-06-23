@@ -264,7 +264,7 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
     }
 }
 
-int minmax_function(const State &curState, int depth, bool maximize_player)
+int minmax_function(const State &curState, int depth, bool minimize_opponent)
 {
     if (curState.disc_count[EMPTY] == 0)
     {
@@ -277,16 +277,16 @@ int minmax_function(const State &curState, int depth, bool maximize_player)
     }
     else if (depth == 0)
     {
-        return curState.disc_count[Player] - curState.disc_count[3 - Player];
+        return curState.next_valid_spots.size();
     }
-    if (maximize_player)
+    if (minimize_opponent)
     {
-        int value = INT_MIN;
+        int value = INT_MAX;
         for (Point p : curState.next_valid_spots)
         {
             State newState = curState;
             newState.put_disc(p);
-            value = std::max(value, minmax_function(newState, depth - 1, false));
+            value = std::min(value, minmax_function(newState, depth - 1, false));
         }
         return value;
     }
@@ -337,7 +337,8 @@ void write_valid_spot(std::ofstream &fout)
     {
         State newState = initState;
         newState.put_disc(p);
-        int new_value = value_function(newState, DEPTH - 1, value, INT_MAX, false);
+        //int new_value = value_function(newState, DEPTH - 1, value, INT_MAX, false);
+        int new_value = minmax_function(newState, DEPTH - 1, false);
         if (new_value > value)
         {
             value = new_value;
