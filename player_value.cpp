@@ -200,6 +200,17 @@ public:
     }
 };
 
+int disc_count_heuristic(const State &curState)
+{
+    return curState.disc_count[Player] - curState.disc_count[3 - Player];
+}
+// player wants to minimize opponent's mobility
+// in other words, the value is higher if the opponent's mobility is lesser
+int mobility_heuristic(const State &curState)
+{
+    return -curState.next_valid_spots.size();
+}
+
 int value_function(const State &curState, int depth, int alpha, int beta, bool maximize_player)
 {
     if (curState.disc_count[EMPTY] == 0)
@@ -213,11 +224,15 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
     }
     else if (depth == 0)
     {
-        return curState.disc_count[Player] - curState.disc_count[3 - Player];
+        return disc_count_heuristic(curState);
     }
     if (maximize_player)
     {
         int value = INT_MIN;
+        if (curState.next_valid_spots.size() == 0)
+        {
+            value = std::max(value, value_function(curState, depth - 1, alpha, beta, false));
+        }
         for (Point p : curState.next_valid_spots)
         {
             State newState = curState;
@@ -232,6 +247,10 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
     else
     {
         int value = INT_MAX;
+        if (curState.next_valid_spots.size() == 0)
+        {
+            value = std::min(value, value_function(curState, depth - 1, alpha, beta, true));
+        }
         for (Point p : curState.next_valid_spots)
         {
             State newState = curState;
@@ -267,7 +286,7 @@ int minmax_function(const State &curState, int depth, bool maximize_player)
         {
             State newState = curState;
             newState.put_disc(p);
-            value = std::max(value, minmax_function(newState, depth-1, false));
+            value = std::max(value, minmax_function(newState, depth - 1, false));
         }
         return value;
     }
@@ -278,7 +297,7 @@ int minmax_function(const State &curState, int depth, bool maximize_player)
         {
             State newState = curState;
             newState.put_disc(p);
-            value = std::min(value, minmax_function(newState, depth-1, true));
+            value = std::min(value, minmax_function(newState, depth - 1, true));
         }
         return value;
     }
