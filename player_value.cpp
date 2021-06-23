@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <climits>
 
-#define DEPTH 10
+#define DEPTH 5
 
 struct Point
 {
@@ -202,7 +202,16 @@ public:
 
 int value_function(const State &curState, int depth, int alpha, int beta, bool maximize_player)
 {
-    if (depth == 0 || curState.disc_count[EMPTY] == 0)
+    if (curState.disc_count[EMPTY] == 0)
+    {
+        if (curState.disc_count[Player] > curState.disc_count[3 - Player])
+            return INT_MAX;
+        else if (curState.disc_count[Player] < curState.disc_count[3 - Player])
+            return INT_MIN;
+        else
+            return 0;
+    }
+    else if (depth == 0)
     {
         return curState.disc_count[Player] - curState.disc_count[3 - Player];
     }
@@ -309,7 +318,7 @@ void write_valid_spot(std::ofstream &fout)
     {
         State newState = initState;
         newState.put_disc(p);
-        int new_value = value_function(newState, DEPTH, INT_MIN, INT_MAX, false);
+        int new_value = value_function(newState, DEPTH - 1, value, INT_MAX, false);
         if (new_value > value)
         {
             value = new_value;
