@@ -19,20 +19,45 @@ struct Point
         return Point(x + rhs.x, y + rhs.y);
     }
 };
-
-int Player;
-const int SIZE = 8;
-const std::array<Point, 8> directions{{Point(-1, -1), Point(-1, 0), Point(-1, 1),
-                                       Point(0, -1), /*{0, 0}, */ Point(0, 1),
-                                       Point(1, -1), Point(1, 0), Point(1, 1)}};
-std::array<std::array<int, SIZE>, SIZE> Board;
-std::vector<Point> Next_Valid_Spots;
 enum SPOT_STATE
 {
     EMPTY = 0,
     BLACK = 1,
     WHITE = 2
 };
+enum TABLE_SCORE
+{
+    C = 10,
+    X = -10,
+    N = -5,
+    E = 1,
+    M = 0
+};
+// heuristic score
+const int CORNER = 100;
+const int MOBILITY = 10;
+const int POTENTIAL_MOBILITY = 10;
+const int DISC = 1;
+
+int Player;
+const int SIZE = 8;
+const std::array<Point, 8> directions{{Point(-1, -1), Point(-1, 0), Point(-1, 1),
+                                       Point(0, -1), /*{0, 0}, */ Point(0, 1),
+                                       Point(1, -1), Point(1, 0), Point(1, 1)}};
+const std::array<Point, 4> corners{{Point(0, 0), Point(0, SIZE - 1), Point(SIZE - 1, 0), Point(SIZE - 1, SIZE - 1)}};
+//const std::array<Point, 4> xspots{{Point(1, 1), Point(1, SIZE - 2), Point(SIZE - 2, 1), Point(SIZE - 2, SIZE - 2)}};
+std::array<std::array<int, SIZE>, SIZE> score_table{{
+    {{C, N, E, E, E, E, N, C}},
+    {{N, X, M, M, M, M, X, N}},
+    {{E, M, M, M, M, M, M, E}},
+    {{E, M, M, M, M, M, M, E}},
+    {{E, M, M, M, M, M, M, E}},
+    {{E, M, M, M, M, M, M, E}},
+    {{N, X, M, M, M, M, X, N}},
+    {{C, N, E, E, E, E, N, C}}
+}};
+std::array<std::array<int, SIZE>, SIZE> Board;
+std::vector<Point> Next_Valid_Spots;
 
 class State
 {
@@ -42,7 +67,7 @@ public:
     std::array<int, 3> disc_count;
     int cur_player;
 
-private:
+public:
     int get_next_player(int player) const
     {
         return 3 - player;
@@ -185,6 +210,9 @@ public:
                     valid_spots.push_back(p);
             }
         }
+        std::sort(valid_spots.begin(), valid_spots.end(), [](Point a, Point b){
+            return score_table[a.x][a.y] > score_table[b.x][b.y];
+        });
         return valid_spots;
     }
     bool put_disc(Point p)
@@ -204,11 +232,43 @@ int disc_count_heuristic(const State &curState)
 {
     return curState.disc_count[Player] - curState.disc_count[3 - Player];
 }
-// player wants to minimize opponent's mobility
-// in other words, the value is higher if the opponent's mobility is lesser
-int mobility_heuristic(const State &curState)
+
+
+int heuristic(const State &curState)
 {
-    return -curState.next_valid_spots.size();
+    int h = 0;
+    // corners
+    for (Point p : corners)
+    {
+        if (curState.board[p.x][p.y] == Player)
+        {
+            h += CORNER;
+        }
+    }
+    // mobility
+    h += curState.next_valid_spots.size() * MOBILITY;
+    // potential mobility
+    for (int i = 0; i < SIZE; i++)
+    {
+        for (int j = 0; j < SIZE; j++)
+        {
+            if (curState.board[i][j] == EMPTY)
+            {
+                Point p(i, j);
+                for (int k = 0; k < 8; k++)
+                {
+                    if (curState.is_disc_at(p + directions[k], 3 - Player))
+                    {
+                        h += POTENTIAL_MOBILITY;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    // disc
+    h += (curState.disc_count[Player] - curState.disc_count[3 - Player]) * DISC;
+    return h;
 }
 
 int value_function(const State &curState, int depth, int alpha, int beta, bool maximize_player)
@@ -224,7 +284,7 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
     }
     else if (depth == 0)
     {
-        return disc_count_heuristic(curState);
+        return heuristic(curState);
     }
     if (maximize_player)
     {
@@ -337,8 +397,8 @@ void write_valid_spot(std::ofstream &fout)
     {
         State newState = initState;
         newState.put_disc(p);
-        //int new_value = value_function(newState, DEPTH - 1, value, INT_MAX, false);
-        int new_value = minmax_function(newState, DEPTH - 1, false);
+        int new_value = value_function(newState, DEPTH - 1, value, INT_MAX, false);
+        //int new_value = value_function(newState, DEPTH - 1, false);
         if (new_value > value)
         {
             value = new_value;
