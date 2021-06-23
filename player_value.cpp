@@ -46,16 +46,14 @@ const std::array<Point, 8> directions{{Point(-1, -1), Point(-1, 0), Point(-1, 1)
                                        Point(1, -1), Point(1, 0), Point(1, 1)}};
 const std::array<Point, 4> corners{{Point(0, 0), Point(0, SIZE - 1), Point(SIZE - 1, 0), Point(SIZE - 1, SIZE - 1)}};
 //const std::array<Point, 4> xspots{{Point(1, 1), Point(1, SIZE - 2), Point(SIZE - 2, 1), Point(SIZE - 2, SIZE - 2)}};
-std::array<std::array<int, SIZE>, SIZE> score_table{{
-    {{C, N, E, E, E, E, N, C}},
-    {{N, X, M, M, M, M, X, N}},
-    {{E, M, M, M, M, M, M, E}},
-    {{E, M, M, M, M, M, M, E}},
-    {{E, M, M, M, M, M, M, E}},
-    {{E, M, M, M, M, M, M, E}},
-    {{N, X, M, M, M, M, X, N}},
-    {{C, N, E, E, E, E, N, C}}
-}};
+std::array<std::array<int, SIZE>, SIZE> score_table{{{{C, N, E, E, E, E, N, C}},
+                                                     {{N, X, M, M, M, M, X, N}},
+                                                     {{E, M, M, M, M, M, M, E}},
+                                                     {{E, M, M, M, M, M, M, E}},
+                                                     {{E, M, M, M, M, M, M, E}},
+                                                     {{E, M, M, M, M, M, M, E}},
+                                                     {{N, X, M, M, M, M, X, N}},
+                                                     {{C, N, E, E, E, E, N, C}}}};
 std::array<std::array<int, SIZE>, SIZE> Board;
 std::vector<Point> Next_Valid_Spots;
 
@@ -210,9 +208,8 @@ public:
                     valid_spots.push_back(p);
             }
         }
-        std::sort(valid_spots.begin(), valid_spots.end(), [](Point a, Point b){
-            return score_table[a.x][a.y] > score_table[b.x][b.y];
-        });
+        std::sort(valid_spots.begin(), valid_spots.end(), [](Point a, Point b)
+                  { return score_table[a.x][a.y] > score_table[b.x][b.y]; });
         return valid_spots;
     }
     bool put_disc(Point p)
@@ -233,7 +230,6 @@ int disc_count_heuristic(const State &curState)
     return curState.disc_count[Player] - curState.disc_count[3 - Player];
 }
 
-
 int heuristic(const State &curState)
 {
     int h = 0;
@@ -243,6 +239,10 @@ int heuristic(const State &curState)
         if (curState.board[p.x][p.y] == Player)
         {
             h += CORNER;
+        }
+        else if (curState.board[p.x][p.y] == 3 - Player)
+        {
+            h -= CORNER;
         }
     }
     // mobility
@@ -286,21 +286,39 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
     {
         return heuristic(curState);
     }
+
     if (maximize_player)
     {
         int value = INT_MIN;
         if (curState.next_valid_spots.size() == 0)
         {
-            value = std::max(value, value_function(curState, depth - 1, alpha, beta, false));
+            value = std::max(value, value_function(curState, depth, alpha, beta, false));
         }
-        for (Point p : curState.next_valid_spots)
+        else if (curState.next_valid_spots.size() == 1)
         {
             State newState = curState;
-            newState.put_disc(p);
-            value = std::max(value, value_function(newState, depth - 1, alpha, beta, false));
+            newState.put_disc(curState.next_valid_spots[0]);
+            value = std::max(value, value_function(newState, depth, alpha, beta, false));
             alpha = std::max(alpha, value);
-            if (alpha >= beta)
-                break;
+        }
+        else
+        {
+            for (Point p : curState.next_valid_spots)
+            {
+                State newState = curState;
+                newState.put_disc(p);
+                if ((p.x == 0 || p.x == SIZE - 1) && (p.y == 0 || p.y == SIZE - 1))
+                {
+                    value = std::max(value, value_function(newState, depth, alpha, beta, false));
+                }
+                else
+                {
+                    value = std::max(value, value_function(newState, depth - 1, alpha, beta, false));
+                }
+                alpha = std::max(alpha, value);
+                if (alpha >= beta)
+                    break;
+            }
         }
         return value;
     }
@@ -309,16 +327,33 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
         int value = INT_MAX;
         if (curState.next_valid_spots.size() == 0)
         {
-            value = std::min(value, value_function(curState, depth - 1, alpha, beta, true));
+            value = std::min(value, value_function(curState, depth, alpha, beta, true));
         }
-        for (Point p : curState.next_valid_spots)
+        else if (curState.next_valid_spots.size() == 1)
         {
             State newState = curState;
-            newState.put_disc(p);
-            value = std::min(value, value_function(newState, depth - 1, alpha, beta, true));
+            newState.put_disc(curState.next_valid_spots[0]);
+            value = std::min(value, value_function(newState, depth, alpha, beta, false));
             beta = std::min(beta, value);
-            if (beta <= alpha)
-                break;
+        }
+        else
+        {
+            for (Point p : curState.next_valid_spots)
+            {
+                State newState = curState;
+                newState.put_disc(p);
+                if ((p.x == 0 || p.x == SIZE - 1) && (p.y == 0 || p.y == SIZE - 1))
+                {
+                    value = std::min(value, value_function(newState, depth, alpha, beta, true));
+                }
+                else
+                {
+                    value = std::min(value, value_function(newState, depth - 1, alpha, beta, true));
+                }
+                beta = std::min(beta, value);
+                if (beta <= alpha)
+                    break;
+            }
         }
         return value;
     }
