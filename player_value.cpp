@@ -30,7 +30,7 @@ enum TABLE_SCORE
     C = 10,
     X = -10,
     N = -5,
-    E = 1,
+    E = 0,
     M = 0
 };
 // heuristic score
@@ -166,12 +166,7 @@ public:
         disc_count[BLACK] = B;
         disc_count[WHITE] = W;
 
-        int size = Next_Valid_Spots.size();
-        next_valid_spots.resize(size);
-        for (int i = 0; i < size; i++)
-        {
-            next_valid_spots[i] = Next_Valid_Spots[i];
-        }
+        next_valid_spots = Next_Valid_Spots;
     }
     State(const State &rhs)
         : cur_player(rhs.cur_player)
@@ -187,12 +182,12 @@ public:
         disc_count[BLACK] = rhs.disc_count[BLACK];
         disc_count[WHITE] = rhs.disc_count[WHITE];
 
-        int size = rhs.next_valid_spots.size();
-        next_valid_spots.resize(size);
-        for (int i = 0; i < size; i++)
-        {
-            next_valid_spots[i] = rhs.next_valid_spots[i];
-        }
+        // int size = rhs.next_valid_spots.size();
+        // next_valid_spots.resize(size);
+        // for (int i = 0; i < size; i++)
+        // {
+        //     next_valid_spots[i] = rhs.next_valid_spots[i];
+        // }
     }
     std::vector<Point> get_valid_spots() const
     {
@@ -223,6 +218,13 @@ public:
         next_valid_spots = get_valid_spots();
         return true;
     }
+    bool pass()
+    {
+        // Give control to the other player.
+        cur_player = get_next_player(cur_player);
+        next_valid_spots = get_valid_spots();
+        return true;
+    }
 };
 
 int disc_count_heuristic(const State &curState)
@@ -246,7 +248,21 @@ int heuristic(const State &curState)
         }
     }
     // mobility
-    h += curState.next_valid_spots.size() * MOBILITY;
+    if (curState.cur_player == Player)
+    {
+        h += curState.next_valid_spots.size() * MOBILITY;
+        State nextState = curState;
+        nextState.pass();
+        h -= curState.next_valid_spots.size() * MOBILITY;
+    }
+    else 
+    {
+        h -= curState.next_valid_spots.size() * MOBILITY;
+        State nextState = curState;
+        nextState.pass();
+        h += curState.next_valid_spots.size() * MOBILITY;
+    }
+        
     // potential mobility
     for (int i = 0; i < SIZE; i++)
     {
@@ -263,11 +279,19 @@ int heuristic(const State &curState)
                         break;
                     }
                 }
+                for (int k = 0; k < 8; k++)
+                {
+                    if (curState.is_disc_at(p + directions[k], Player))
+                    {
+                        h -= POTENTIAL_MOBILITY;
+                        break;
+                    }
+                }
             }
         }
     }
     // disc
-    h += (curState.disc_count[Player] - curState.disc_count[3 - Player]) * DISC;
+    //h += (curState.disc_count[Player] - curState.disc_count[3 - Player]) * DISC;
     return h;
 }
 
@@ -292,12 +316,14 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
         int value = INT_MIN;
         if (curState.next_valid_spots.size() == 0)
         {
-            value = std::max(value, value_function(curState, depth, alpha, beta, false));
+            State newState = curState;
+            newState.pass();
+            value = std::max(value, value_function(newState, depth, alpha, beta, false));
         }
         else if (curState.next_valid_spots.size() == 1)
         {
             State newState = curState;
-            newState.put_disc(curState.next_valid_spots[0]);
+            newState.put_disc(curState.next_valid_spots.front());
             value = std::max(value, value_function(newState, depth, alpha, beta, false));
             alpha = std::max(alpha, value);
         }
@@ -307,6 +333,7 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
             {
                 State newState = curState;
                 newState.put_disc(p);
+                // corner move
                 if ((p.x == 0 || p.x == SIZE - 1) && (p.y == 0 || p.y == SIZE - 1))
                 {
                     value = std::max(value, value_function(newState, depth, alpha, beta, false));
@@ -327,13 +354,15 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
         int value = INT_MAX;
         if (curState.next_valid_spots.size() == 0)
         {
-            value = std::min(value, value_function(curState, depth, alpha, beta, true));
+            State newState = curState;
+            newState.pass();
+            value = std::min(value, value_function(newState, depth, alpha, beta, true));
         }
         else if (curState.next_valid_spots.size() == 1)
         {
             State newState = curState;
-            newState.put_disc(curState.next_valid_spots[0]);
-            value = std::min(value, value_function(newState, depth, alpha, beta, false));
+            newState.put_disc(curState.next_valid_spots.front());
+            value = std::min(value, value_function(newState, depth, alpha, beta, true));
             beta = std::min(beta, value);
         }
         else
@@ -342,6 +371,7 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
             {
                 State newState = curState;
                 newState.put_disc(p);
+                // corner move
                 if ((p.x == 0 || p.x == SIZE - 1) && (p.y == 0 || p.y == SIZE - 1))
                 {
                     value = std::min(value, value_function(newState, depth, alpha, beta, true));
@@ -430,11 +460,17 @@ void write_valid_spot(std::ofstream &fout)
     fout.flush();
     for (Point p : initState.next_valid_spots)
     {
+        // if ((p.x == 0 || p.x == SIZE - 1) && (p.y == 0 || p.y == SIZE - 1))
+        // {
+        //     fout << p.x << " " << p.y << std::endl;
+        //     fout.flush();
+        //     break;
+        // }
         State newState = initState;
         newState.put_disc(p);
         int new_value = value_function(newState, DEPTH - 1, value, INT_MAX, false);
-        //int new_value = value_function(newState, DEPTH - 1, false);
-        if (new_value > value)
+        //int new_value = minmax_function(newState, DEPTH - 1, false);
+        if (new_value >= value)
         {
             value = new_value;
             fout << p.x << " " << p.y << std::endl;
