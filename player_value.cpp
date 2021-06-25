@@ -35,8 +35,10 @@ enum TABLE_SCORE
 };
 // heuristic score
 const int CORNER = 100;
+const int XSPOT = -100;
+const int CSPOT = -50;
 const int MOBILITY = 10;
-const int POTENTIAL_MOBILITY = 10;
+const int POTENTIAL_MOBILITY = 5;
 const int DISC = 1;
 
 int Player;
@@ -45,7 +47,11 @@ const std::array<Point, 8> directions{{Point(-1, -1), Point(-1, 0), Point(-1, 1)
                                        Point(0, -1), /*{0, 0}, */ Point(0, 1),
                                        Point(1, -1), Point(1, 0), Point(1, 1)}};
 const std::array<Point, 4> corners{{Point(0, 0), Point(0, SIZE - 1), Point(SIZE - 1, 0), Point(SIZE - 1, SIZE - 1)}};
-//const std::array<Point, 4> xspots{{Point(1, 1), Point(1, SIZE - 2), Point(SIZE - 2, 1), Point(SIZE - 2, SIZE - 2)}};
+const std::array<Point, 4> xspots{{Point(1, 1), Point(1, SIZE - 2), Point(SIZE - 2, 1), Point(SIZE - 2, SIZE - 2)}};
+const std::array<std::array<Point, 2>, 4> cspots{{{{Point(0, 1), Point(1, 0)}},
+                                                  {{Point(0, SIZE - 2), Point(1, SIZE - 1)}},
+                                                  {{Point(SIZE - 2, 0), Point(SIZE - 1, 1)}},
+                                                  {{Point(SIZE - 2, SIZE - 1), Point(SIZE - 1, SIZE - 2)}}}};
 std::array<std::array<int, SIZE>, SIZE> score_table{{{{C, N, E, E, E, E, N, C}},
                                                      {{N, X, M, M, M, M, X, N}},
                                                      {{E, M, M, M, M, M, M, E}},
@@ -167,6 +173,8 @@ public:
         disc_count[WHITE] = W;
 
         next_valid_spots = Next_Valid_Spots;
+        std::sort(next_valid_spots.begin(), next_valid_spots.end(), [](Point a, Point b)
+                  { return score_table[a.x][a.y] > score_table[b.x][b.y]; });
     }
     State(const State &rhs)
         : cur_player(rhs.cur_player)
@@ -236,17 +244,42 @@ int heuristic(const State &curState)
 {
     int h = 0;
     // corners
-    for (Point p : corners)
+    for (int i = 0; i < 4; i++)
     {
-        if (curState.board[p.x][p.y] == Player)
+        if (curState.board[corners[i].x][corners[i].y] == Player)
         {
             h += CORNER;
         }
-        else if (curState.board[p.x][p.y] == 3 - Player)
+        else if (curState.board[corners[i].x][corners[i].y] == 3 - Player)
         {
             h -= CORNER;
         }
+        else
+        {
+            // xspot
+            if (curState.board[xspots[i].x][xspots[i].y] == Player)
+            {
+                h += XSPOT;
+            }
+            else if (curState.board[xspots[i].x][xspots[i].y] == 3 - Player)
+            {
+                h -= XSPOT;
+            }
+            // cspot
+            for (int j = 0; j < 2; j++)
+            {
+                if (curState.board[cspots[i][j].x][cspots[i][j].y] == Player)
+                {
+                    h += CSPOT;
+                }
+                else if (curState.board[cspots[i][j].x][cspots[i][j].y] == 3 - Player)
+                {
+                    h -= CSPOT;
+                }
+            }
+        }
     }
+
     // mobility
     if (curState.cur_player == Player)
     {
@@ -255,14 +288,14 @@ int heuristic(const State &curState)
         nextState.pass();
         h -= curState.next_valid_spots.size() * MOBILITY;
     }
-    else 
+    else
     {
         h -= curState.next_valid_spots.size() * MOBILITY;
         State nextState = curState;
         nextState.pass();
         h += curState.next_valid_spots.size() * MOBILITY;
     }
-        
+
     // potential mobility
     for (int i = 0; i < SIZE; i++)
     {
@@ -291,7 +324,7 @@ int heuristic(const State &curState)
         }
     }
     // disc
-    //h += (curState.disc_count[Player] - curState.disc_count[3 - Player]) * DISC;
+    h += (curState.disc_count[Player] - curState.disc_count[3 - Player]) * DISC;
     return h;
 }
 
@@ -305,6 +338,14 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
             return INT_MIN;
         else
             return 0;
+    }
+    else if (curState.disc_count[Player] == 0)
+    {
+        return INT_MIN;
+    }
+    else if (curState.disc_count[3 - Player] == 0)
+    {
+        return INT_MAX;
     }
     else if (depth == 0)
     {
@@ -470,7 +511,7 @@ void write_valid_spot(std::ofstream &fout)
         newState.put_disc(p);
         int new_value = value_function(newState, DEPTH - 1, value, INT_MAX, false);
         //int new_value = minmax_function(newState, DEPTH - 1, false);
-        if (new_value >= value)
+        if (new_value > value)
         {
             value = new_value;
             fout << p.x << " " << p.y << std::endl;
