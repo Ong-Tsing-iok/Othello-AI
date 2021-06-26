@@ -190,6 +190,8 @@ public:
         disc_count[BLACK] = rhs.disc_count[BLACK];
         disc_count[WHITE] = rhs.disc_count[WHITE];
 
+        next_valid_spots = rhs.next_valid_spots;
+
         // int size = rhs.next_valid_spots.size();
         // next_valid_spots.resize(size);
         // for (int i = 0; i < size; i++)
@@ -328,25 +330,30 @@ int heuristic(const State &curState)
     return h;
 }
 
-int value_function(const State &curState, int depth, int alpha, int beta, bool maximize_player)
+int gameEnd(const State &curState)
 {
-    if (curState.disc_count[EMPTY] == 0)
-    {
-        if (curState.disc_count[Player] > curState.disc_count[3 - Player])
+    if (curState.disc_count[Player] > curState.disc_count[3 - Player])
             return INT_MAX;
         else if (curState.disc_count[Player] < curState.disc_count[3 - Player])
             return INT_MIN;
         else
             return 0;
-    }
-    else if (curState.disc_count[Player] == 0)
+}
+
+int value_function(const State &curState, int depth, int alpha, int beta, bool maximize_player, bool passed = false)
+{
+    if (curState.disc_count[EMPTY] == 0)
     {
-        return INT_MIN;
+        return gameEnd(curState);
     }
-    else if (curState.disc_count[3 - Player] == 0)
-    {
-        return INT_MAX;
-    }
+    // else if (curState.disc_count[Player] == 0)
+    // {
+    //     return INT_MIN;
+    // }
+    // else if (curState.disc_count[3 - Player] == 0)
+    // {
+    //     return INT_MAX;
+    // }
     else if (depth == 0)
     {
         return heuristic(curState);
@@ -357,9 +364,11 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
         int value = INT_MIN;
         if (curState.next_valid_spots.size() == 0)
         {
+            if (passed) return gameEnd(curState);
+
             State newState = curState;
             newState.pass();
-            value = std::max(value, value_function(newState, depth, alpha, beta, false));
+            value = std::max(value, value_function(newState, depth, alpha, beta, false, true));
         }
         else if (curState.next_valid_spots.size() == 1)
         {
@@ -395,6 +404,8 @@ int value_function(const State &curState, int depth, int alpha, int beta, bool m
         int value = INT_MAX;
         if (curState.next_valid_spots.size() == 0)
         {
+            if (passed) return gameEnd(curState);
+
             State newState = curState;
             newState.pass();
             value = std::min(value, value_function(newState, depth, alpha, beta, true));
@@ -497,7 +508,7 @@ void write_valid_spot(std::ofstream &fout)
 {
     State initState;
     int value = INT_MIN;
-    fout << Next_Valid_Spots[0].x << " " << Next_Valid_Spots[0].y << std::endl;
+    fout << initState.next_valid_spots.front().x << " " << initState.next_valid_spots.front().y << std::endl;
     fout.flush();
     for (Point p : initState.next_valid_spots)
     {
